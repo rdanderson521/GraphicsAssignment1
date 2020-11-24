@@ -96,12 +96,6 @@ void Tube::makeTube(GLuint numSegments, GLfloat thickness)
 		pindices[i * ((numvertices / 4) + 2) + (numvertices / 4) + 1] = i * (numvertices / 4) + 1;
 	}
 	
-
-	for (int i = 0; i < numindices; i++)
-	{
-		std::cout << pindices[i] << std::endl;
-	}
-
 	// Generate a buffer for the indices
 	glGenBuffers(1, &elementbuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);

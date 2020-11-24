@@ -53,6 +53,7 @@ GLfloat angle_x, angle_inc_x, x, model_scale, z, y, vx, vy, vz;
 GLfloat angle_y, angle_inc_y, angle_z, angle_inc_z;
 GLuint drawmode;			// Defines drawing mode of sphere as points, lines or filled polygons
 GLfloat speed;				// movement increment
+GLfloat motorAngle;				// movement increment
 
 GLfloat light_x, light_y, light_z;
 
@@ -65,6 +66,7 @@ GLuint numspherevertices;
 
 /* Global instances of our objects */
 Tube tube;
+Tube motorBell, motorStator, motorShaft;
 Cube cube;
 Sphere sphere;
 
@@ -90,6 +92,7 @@ void init(GLWrapper* glw)
 	aspect_ratio = 1.3333f;
 	colourmode = 0; emitmode = 0;
 	attenuationmode = 1; // Attenuation is on by default
+	motorAngle = 0;
 
 	// Generate index (name) for one vertex array object
 	glGenVertexArrays(1, &vao);
@@ -123,7 +126,10 @@ void init(GLWrapper* glw)
 
 
 	sphere.makeSphere(20, 20);
-	tube.makeTube(60, 0.1);
+	tube.makeTube(40, 0.1);
+	motorBell.makeTube(40, 0.1);
+	motorStator.makeTube(40, 0.85);
+	motorShaft.makeTube(40, 0.7);
 	cube.makeCube();
 }
 
@@ -132,7 +138,7 @@ void init(GLWrapper* glw)
 void display()
 {
 	/* Define the background colour */
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0.2f, 0.5f, 1.0f, 1.0f);
 
 	/* Clear the colour and frame buffers */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -211,6 +217,13 @@ void display()
 		vec3 framePlateScale = vec3(1.f, 0.015f, 0.3f);
 		vec3 frameArmScale = vec3(0.8f, 0.03f, 0.15f);
 		vec3 standoffScale = vec3(0.025f, 0.17f, 0.025f);
+
+		vec3 motorBellScale = vec3(0.15f, 0.085f, 0.15f);
+		vec3 motorStatorScale = vec3(0.125f, 0.08f, 0.125f);
+		vec3 motorShaftScale = vec3(0.025f, 0.085f, 0.025f);
+		vec3 motorStrutsScale = vec3(0.011f, 0.011f, 0.14f);
+
+
 		
 
 		model.push(model.top());
@@ -255,6 +268,9 @@ void display()
 			{
 				model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
 				model.top() = translate(model.top(), vec3(0.45f, -0.1f, 0.f));
+
+				
+
 				model.top() = scale(model.top(), frameArmScale);
 
 
@@ -267,6 +283,175 @@ void display()
 
 				/* Draw our cube*/
 				cube.drawCube(drawmode);
+			}
+			model.pop();
+		}
+
+
+		//motors 
+		for (int i = 0; i < 4; i++)
+		{
+			model.push(model.top());
+			{
+
+				model.push(model.top());
+				{
+					model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
+					model.top() = translate(model.top(), vec3(0.77f, -0.02f, 0.f));
+
+
+					// moving bits
+					model.push(model.top());
+					{
+
+						if (i % 2 == 0)
+						{
+							model.top() = rotate(model.top(), -radians(motorAngle++), glm::vec3(0, 1, 0));
+						}
+						else
+						{
+							model.top() = rotate(model.top(), radians(motorAngle++), glm::vec3(0, 1, 0));
+						}
+					
+						// mtor struts
+						model.push(model.top());
+						{
+							model.top() = translate(model.top(), vec3(0.f, 0.042f, 0.f));
+							for (int j = 0; j < 3; j++)
+							{
+								model.push(model.top());
+								{
+									model.top() = rotate(model.top(), -radians(120.f * j), glm::vec3(0, 1, 0));
+									model.push(model.top());
+									{
+										model.top() = translate(model.top(), vec3(0.015f, 0.f, 0.f));
+										model.top() = scale(model.top(), motorStrutsScale);
+
+										// Send the model uniform and normal matrix to the currently bound shader,
+										glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+										// Recalculate the normal matrix and send to the vertex shader
+										normalmatrix = transpose(inverse(mat3(view * model.top())));
+										glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+										cube.drawCube(drawmode);
+									}
+									model.pop();
+
+									model.push(model.top());
+									{
+										model.top() = translate(model.top(), vec3(-0.015f, 0.f, 0.f));
+										model.top() = scale(model.top(), motorStrutsScale);
+
+										// Send the model uniform and normal matrix to the currently bound shader,
+										glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+										// Recalculate the normal matrix and send to the vertex shader
+										normalmatrix = transpose(inverse(mat3(view * model.top())));
+										glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+										cube.drawCube(drawmode);
+									}
+									model.pop();
+								}
+								model.pop();
+							}
+						}
+						model.pop();
+
+						// motor shaft
+						model.push(model.top());
+						{
+							model.top() = translate(model.top(), vec3(0.f, 0.06f, 0.f));
+							model.top() = scale(model.top(), motorShaftScale);
+							model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
+
+							// Send the model uniform and normal matrix to the currently bound shader,
+							glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+							// Recalculate the normal matrix and send to the vertex shader
+							normalmatrix = transpose(inverse(mat3(view * model.top())));
+							glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+							motorShaft.drawTube(drawmode);
+						}
+						model.pop();
+
+						// motor bell
+						model.push(model.top());
+						{
+							model.top() = scale(model.top(), motorBellScale);
+							model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
+
+							// Send the model uniform and normal matrix to the currently bound shader,
+							glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+							// Recalculate the normal matrix and send to the vertex shader
+							normalmatrix = transpose(inverse(mat3(view * model.top())));
+							glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+							motorBell.drawTube(drawmode);
+						}
+						model.pop();
+					}
+					model.pop();
+					
+					// motor base 
+					model.push(model.top());
+					{
+						model.top() = translate(model.top(), vec3(0.f, -0.06f, 0.f));
+						model.top() = scale(model.top(), vec3(0.12f, 0.01f, 0.04f));
+
+						// Send the model uniform and normal matrix to the currently bound shader,
+						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+						// Recalculate the normal matrix and send to the vertex shader
+						normalmatrix = transpose(inverse(mat3(view * model.top())));
+						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+						/* Draw our cube*/
+						cube.drawCube(drawmode);						
+					}
+					model.pop();
+
+					model.push(model.top());
+					{
+						model.top() = translate(model.top(), vec3(0.f, -0.06f, 0.f));
+						model.top() = scale(model.top(), vec3(0.04f, 0.01f, 0.12f));
+
+						// Send the model uniform and normal matrix to the currently bound shader,
+						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+						// Recalculate the normal matrix and send to the vertex shader
+						normalmatrix = transpose(inverse(mat3(view * model.top())));
+						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+						/* Draw our cube*/
+						cube.drawCube(drawmode);
+					}
+					model.pop();
+
+					// motor stator
+					model.push(model.top());
+					{
+						model.top() = translate(model.top(), vec3(0.f, -0.015f, 0.f));
+						model.top() = scale(model.top(), motorStatorScale);
+						model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
+
+						// Send the model uniform and normal matrix to the currently bound shader,
+						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+
+						// Recalculate the normal matrix and send to the vertex shader
+						normalmatrix = transpose(inverse(mat3(view * model.top())));
+						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+						/* Draw our cube*/
+						motorStator.drawTube(drawmode);
+					}
+					model.pop();
+
+				}
+				model.pop();
 			}
 			model.pop();
 		}
