@@ -198,27 +198,29 @@ void display()
 	glUniform1ui(attenuationModeID, attenuationmode);
 	glUniformMatrix4fv(viewID, 1, GL_FALSE, &view[0][0]);
 	glUniformMatrix4fv(projectionID, 1, GL_FALSE, &projection[0][0]);
-	glUniform4fv(lightPosID[0], 1, value_ptr(lightpos));
-	glUniform1ui(numLightsID, ++numLights);
+	
 
 	/* Draw a small sphere in the lightsource position to visually represent the light source */
-	model.push(model.top());
-	{
-		model.top() = translate(model.top(), vec3(light_x, light_y, light_z));
-		model.top() = scale(model.top(), vec3(0.05f, 0.05f, 0.05f)); // make a small sphere
-																	 // Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
-		glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-		normalmatrix = transpose(inverse(mat3(view * model.top())));
-		glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+	//model.push(model.top());
+	//{
+	//	glUniform4fv(lightPosID[numLights++], 1, &lightpos[0]);
+	//	glUniform1ui(numLightsID, numLights);
 
-		/* Draw our lightposition sphere  with emit mode on*/
-		emitmode = 1;
-		glUniform1ui(emitModeID, emitmode);
-		sphere.drawSphere(drawmode);
-		emitmode = 0;
-		glUniform1ui(emitModeID, emitmode);
-	}
-	model.pop();
+	//	model.top() = translate(model.top(), vec3(light_x, light_y, light_z));
+	//	model.top() = scale(model.top(), vec3(0.05f, 0.05f, 0.05f)); // make a small sphere
+	//																 // Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
+	//	glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+	//	normalmatrix = transpose(inverse(mat3(view * model.top())));
+	//	glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+	//	/* Draw our lightposition sphere  with emit mode on*/
+	//	emitmode = 1;
+	//	glUniform1ui(emitModeID, emitmode);
+	//	sphere.drawSphere(drawmode);
+	//	emitmode = 0;
+	//	glUniform1ui(emitModeID, emitmode);
+	//}
+	//model.pop();
 
 	// Define the global model transformations (rotate and scale). Note, we're not modifying thel ight source position
 	model.top() = scale(model.top(), vec3(model_scale, model_scale, model_scale));//scale equally in all axis
@@ -247,10 +249,42 @@ void display()
 		vec4 standoffColour = vec4(1.f, 0.f, 0.f, 1.f);
 
 		GLfloat frameReflect = 0.f;
-		GLfloat motorReflect = 10.f;
+		GLfloat motorReflect = 4.f;
 		GLfloat motorStatorReflect = 2.f;
-		GLfloat standoffReflect = 4.f;
+		GLfloat standoffReflect = 1.f;
 
+
+		// light sources on drone
+		for (int i = 0; i < 4; i++)
+		{
+			/* Draw a small sphere in the lightsource position to visually represent the light source */
+			model.push(model.top());
+			{
+				model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
+				model.top() = translate(model.top(), vec3(0.25f, -0.08f, 0.f));
+				model.top() = scale(model.top(), vec3(0.02f, 0.02f, 0.02f)); // make a small sphere
+																			 // Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
+				glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
+				normalmatrix = transpose(inverse(mat3(view * model.top())));
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+				/* Draw our lightposition sphere  with emit mode on*/
+				emitmode = 1;
+				glUniform1ui(emitModeID, emitmode);
+				sphere.drawSphere(drawmode);
+				emitmode = 0;
+				glUniform1ui(emitModeID, emitmode);
+
+
+				lightpos =  view * model.top() * vec4(1.0f);
+				glUniform4fv(lightPosID[numLights++], 1, &lightpos[0]);
+				glUniform1ui(numLightsID, numLights);
+			}
+			model.pop();
+		}
+
+
+		// frame top and bottom plates
 		model.push(model.top());
 		{
 
@@ -267,7 +301,6 @@ void display()
 			normalmatrix = transpose(inverse(mat3(view * model.top())));
 			glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-			/* Draw our cube*/
 			cube.drawCube(drawmode);
 		}
 		model.pop();
@@ -287,13 +320,11 @@ void display()
 			normalmatrix = transpose(inverse(mat3(view * model.top())));
 			glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-			/* Draw our cube*/
 			cube.drawCube(drawmode);
 		}
 		model.pop();
 
 		// arms
-		
 		for (int i = 0; i < 4; i++)
 		{
 			model.push(model.top());
