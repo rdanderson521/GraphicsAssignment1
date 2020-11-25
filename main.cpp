@@ -55,7 +55,6 @@ GLuint drawmode;			// Defines drawing mode of sphere as points, lines or filled 
 GLfloat speed;				// movement increment
 GLfloat motorAngle;				// movement increment
 
-GLfloat light_x, light_y, light_z;
 
 /* Uniforms*/
 GLuint modelID, viewID, projectionID, normalMatrixID, viewPosID;
@@ -64,6 +63,7 @@ GLuint colourOverrideID, reflectivenessID, numLightsID;
 
 const int maxNumLights = 10;
 GLuint lightPosID[maxNumLights];
+GLuint lightColourID[maxNumLights];
 int numLights;
 
 
@@ -91,7 +91,7 @@ void init(GLWrapper* glw)
 	y = 0;
 	z = 0;
 	vx = 0; vx = 0, vz = 4.f;
-	light_x = 0; light_y = 1; light_z = 0;
+	//light_x = 0; light_y = 1; light_z = 0;
 	angle_x = angle_y = angle_z = 0;
 	angle_inc_x = angle_inc_y = angle_inc_z = 0;
 	model_scale = 1.f;
@@ -132,6 +132,9 @@ void init(GLWrapper* glw)
 	{
 		std::string str = "lightPos[" + std::to_string(i) + "]";
 		lightPosID[i] = glGetUniformLocation(program, str.c_str());
+
+		str = "lightColour[" + std::to_string(i) + "]";
+		lightColourID[i] = glGetUniformLocation(program, str.c_str());
 	}
 	numLightsID = glGetUniformLocation(program, "numLights");
 	viewPosID = glGetUniformLocation(program, "viewPos");
@@ -148,92 +151,16 @@ void init(GLWrapper* glw)
 	cube.makeCube();
 }
 
-/* Called to update the display. Note that this function is called in the event loop in the wrapper
-   class because we registered display as a callback function */
-void display()
+void render(std::stack<mat4>& model, mat4& view)
 {
-	/* Define the background colour */
-	glClearColor(0.2f, 0.5f, 1.0f, 1.0f);
-
-	/* Clear the colour and frame buffers */
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	/* Enable depth test  */
-	glEnable(GL_DEPTH_TEST);
-
-	/* Make the compiled shader program current */
-	glUseProgram(program);
-
-	// Define our model transformation in a stack and 
-	// push the identity matrix onto the stack
-	stack<mat4> model;
-	model.push(mat4(1.0f));
-
-	// Define the normal matrix
 	mat3 normalmatrix;
-
-	// Projection matrix : 60° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-	mat4 projection = perspective(radians(60.f), aspect_ratio, 0.1f, 100.f);
-
-	// Camera matrix
-	mat4 view = lookAt(
-		vec3(0, 0, 4), // Camera is at (0,0,4), in World Space
-		vec3(0, 0, 0), // and looks at the origin
-		vec3(0, 1, 0)  // Head is up (set to 0,-1,0 to look upside-down)
-	);
-
-	// Apply rotations to the view position. This wil get appleid to the whole scene
-	view = rotate(view, -radians(vx), vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
-	view = rotate(view, -radians(vy), vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
-	view = rotate(view, -radians(vz), vec3(0, 0, 1));
-
-	// Define the light position and transform by the view matrix
-	vec4 lightpos = view * vec4(light_x, light_y, light_z, 1.0);
-
-	numLights = 0;
-
-	// Send our projection and view uniforms to the currently bound shader
-	// I do that here because they are the same for all objects
-	glUniform1ui(colourModeID, colourmode);
-	glUniform1ui(attenuationModeID, attenuationmode);
-	glUniformMatrix4fv(viewID, 1, GL_FALSE, &view[0][0]);
-	glUniformMatrix4fv(projectionID, 1, GL_FALSE, &projection[0][0]);
-	
-
-	/* Draw a small sphere in the lightsource position to visually represent the light source */
-	//model.push(model.top());
-	//{
-	//	glUniform4fv(lightPosID[numLights++], 1, &lightpos[0]);
-	//	glUniform1ui(numLightsID, numLights);
-
-	//	model.top() = translate(model.top(), vec3(light_x, light_y, light_z));
-	//	model.top() = scale(model.top(), vec3(0.05f, 0.05f, 0.05f)); // make a small sphere
-	//																 // Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
-	//	glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-	//	normalmatrix = transpose(inverse(mat3(view * model.top())));
-	//	glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
-
-	//	/* Draw our lightposition sphere  with emit mode on*/
-	//	emitmode = 1;
-	//	glUniform1ui(emitModeID, emitmode);
-	//	sphere.drawSphere(drawmode);
-	//	emitmode = 0;
-	//	glUniform1ui(emitModeID, emitmode);
-	//}
-	//model.pop();
-
-	// Define the global model transformations (rotate and scale). Note, we're not modifying thel ight source position
-	model.top() = scale(model.top(), vec3(model_scale, model_scale, model_scale));//scale equally in all axis
-	model.top() = rotate(model.top(), -radians(angle_x), glm::vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
-	model.top() = rotate(model.top(), -radians(angle_y), glm::vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
-	model.top() = rotate(model.top(), -radians(angle_z), glm::vec3(0, 0, 1)); //rotating in clockwise direction around z-axis
 
 	// This block of code draws the drone
 	model.push(model.top());
 	{
 
 		model.top() = translate(model.top(), vec3(x, y, z));
-		
+
 		vec3 framePlateScale = vec3(1.f, 0.015f, 0.3f);
 		vec3 frameArmScale = vec3(0.8f, 0.03f, 0.15f);
 		vec3 standoffScale = vec3(0.025f, 0.17f, 0.025f);
@@ -249,7 +176,7 @@ void display()
 		vec4 standoffColour = vec4(1.f, 0.f, 0.f, 1.f);
 
 		GLfloat frameReflect = 0.f;
-		GLfloat motorReflect = 4.f;
+		GLfloat motorReflect = 8.f;
 		GLfloat motorStatorReflect = 2.f;
 		GLfloat standoffReflect = 1.f;
 
@@ -276,9 +203,15 @@ void display()
 				glUniform1ui(emitModeID, emitmode);
 
 
-				lightpos =  view * model.top() * vec4(1.0f);
-				glUniform4fv(lightPosID[numLights++], 1, &lightpos[0]);
-				glUniform1ui(numLightsID, numLights);
+				vec3 lightPos = view * model.top() * vec4(1.0f);
+				vec3 lightColour;
+				if (i > 0 && i < 3)
+					lightColour = vec3(1.f, 0.f, 0.f);
+				else
+					lightColour = vec3(0.f, 0.f, 1.f);
+				glUniform4fv(lightPosID[numLights], 1, &lightPos[0]);
+				glUniform3fv(lightColourID[numLights], 1, &lightColour[0]);
+				glUniform1ui(numLightsID, ++numLights);
 			}
 			model.pop();
 		}
@@ -336,7 +269,7 @@ void display()
 				// set the reflectiveness uniform
 				glUniform1f(reflectivenessID, frameReflect);
 				// set the colour uniform
-				glUniform4fv(colourOverrideID, 1, &frameColour[0]);	
+				glUniform4fv(colourOverrideID, 1, &frameColour[0]);
 				// Send the model uniform and normal matrix to the currently bound shader,
 				glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
 				// Recalculate the normal matrix and send to the vertex shader
@@ -373,7 +306,7 @@ void display()
 						{
 							model.top() = rotate(model.top(), radians(motorAngle++), glm::vec3(0, 1, 0));
 						}
-					
+
 						// mtor struts
 						model.push(model.top());
 						{
@@ -468,7 +401,7 @@ void display()
 						model.pop();
 					}
 					model.pop();
-					
+
 					// motor base 
 					model.push(model.top());
 					{
@@ -485,7 +418,7 @@ void display()
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
 						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-						cube.drawCube(drawmode);						
+						cube.drawCube(drawmode);
 					}
 					model.pop();
 
@@ -545,7 +478,7 @@ void display()
 
 		// standoffs
 		{
-			
+
 			model.push(model.top());
 			{
 				model.top() = translate(model.top(), vec3(0.45f, 0.00f, 0.12f));
@@ -696,7 +629,66 @@ void display()
 		}
 	}
 	model.pop();
+}
 
+/* Called to update the display. Note that this function is called in the event loop in the wrapper
+   class because we registered display as a callback function */
+void display()
+{
+	/* Define the background colour */
+	glClearColor(0.2f, 0.5f, 1.0f, 1.0f);
+
+	/* Clear the colour and frame buffers */
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	/* Enable depth test  */
+	glEnable(GL_DEPTH_TEST);
+
+	/* Make the compiled shader program current */
+	glUseProgram(program);
+
+	// Define our model transformation in a stack and 
+	// push the identity matrix onto the stack
+	stack<mat4> model;
+	model.push(mat4(1.0f));
+
+	// Define the normal matrix
+	mat3 normalmatrix;
+
+	// Projection matrix : 60° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
+	mat4 projection = perspective(radians(60.f), aspect_ratio, 0.1f, 100.f);
+
+	// Camera matrix
+	mat4 view = lookAt(
+		vec3(0, 0, 4), // Camera is at (0,0,4), in World Space
+		vec3(0, 0, 0), // and looks at the origin
+		vec3(0, 1, 0)  // Head is up (set to 0,-1,0 to look upside-down)
+	);
+
+	// Apply rotations to the view position. This wil get appleid to the whole scene
+	view = rotate(view, -radians(vx), vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
+	view = rotate(view, -radians(vy), vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
+	view = rotate(view, -radians(vz), vec3(0, 0, 1));
+
+	// Declare lightpos and reset num lights to 0 
+	vec4 lightpos = vec4(0.f);
+	numLights = 0;
+
+	// Send our projection and view uniforms to the currently bound shader
+	// I do that here because they are the same for all objects
+	glUniform1ui(colourModeID, colourmode);
+	glUniform1ui(attenuationModeID, attenuationmode);
+	glUniformMatrix4fv(viewID, 1, GL_FALSE, &view[0][0]);
+	glUniformMatrix4fv(projectionID, 1, GL_FALSE, &projection[0][0]);
+	
+
+	// Define the global model transformations (rotate and scale). Note, we're not modifying thel ight source position
+	model.top() = scale(model.top(), vec3(model_scale, model_scale, model_scale));//scale equally in all axis
+	model.top() = rotate(model.top(), -radians(angle_x), glm::vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
+	model.top() = rotate(model.top(), -radians(angle_y), glm::vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
+	model.top() = rotate(model.top(), -radians(angle_z), glm::vec3(0, 0, 1)); //rotating in clockwise direction around z-axis
+
+	render(model,view);
 
 	glDisableVertexAttribArray(0);
 	glUseProgram(0);
@@ -737,12 +729,12 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 	if (key == 'V') y += speed;
 	if (key == 'B') z -= speed;
 	if (key == 'N') z += speed;
-	if (key == '1') light_x -= speed;
+	/*if (key == '1') light_x -= speed;
 	if (key == '2') light_x += speed;
 	if (key == '3') light_y -= speed;
 	if (key == '4') light_y += speed;
 	if (key == '5') light_z -= speed;
-	if (key == '6') light_z += speed;
+	if (key == '6') light_z += speed;*/
 	if (key == '7') vx -= 1.f;
 	if (key == '8') vx += 1.f;
 	if (key == '9') vy -= 1.f;
