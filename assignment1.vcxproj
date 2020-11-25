@@ -156,6 +156,8 @@
   <ItemGroup>
     <None Include="poslight.frag" />
     <None Include="poslight.vert" />
+    <None Include="shadows.frag" />
+    <None Include="shadows.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

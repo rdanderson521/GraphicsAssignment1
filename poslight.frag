@@ -3,19 +3,19 @@
 
 #version 420 core
 
-//in vec4 fcolour;
-
 in VERTEX_OUT
 {
 	vec3 pos;
 	vec3 normal;
 	vec4 vertexColour;
+	vec4 FragPosLightSpace;
 } fIn;
 
 
 out vec4 outputColor;
 
 uniform vec3 viewPos;
+uniform sampler2D shadowMap;
 
 uniform mat4 model, view, projection;
 uniform mat3 normalMatrix;
@@ -31,6 +31,21 @@ uniform uint attenuationMode;
 
 vec3 specular_albedo = vec3(1.0, 0.8, 0.6);
 vec3 global_ambient = vec3(0.05, 0.05, 0.05);
+
+float shadowCalculation(vec4 lightSpace)
+{
+	vec3 projCoords = lightSpace.xyz / lightSpace.w;
+
+	projCoords = projCoords * 0.5 + 0.5;
+
+	float closestDepth = texture(shadowMap, projCoords.xy).r;
+
+	float currentDepth = projCoords.z; 
+
+	float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
+    return shadow;
+}
+
 
 void main()
 {
@@ -57,7 +72,7 @@ void main()
 
 		// Define our vectors to calculate diffuse and specular lighting
 		mat4 mv_matrix = view * model;		// Calculate the model-view transformation
-		vec4 P = mv_matrix * position_h;	// Modify the vertex position (x, y, z, w) by the model-view transformation
+		vec4 P = view * position_h;	// Modify the vertex position (x, y, z, w) by the model-view transformation
 		vec3 N = normalize(normalMatrix * fIn.normal);		// Modify the normals by the normal-matrix (i.e. to model-view (or eye) coordinates )
 		vec3 L = light_pos3 - P.xyz;		// Calculate the vector from the light position to the vertex in eye space
 		float distanceToLight = length(L);	// For attenuation
@@ -85,12 +100,15 @@ void main()
 		{
 			// Define attenuation constants. These could be uniforms for greater flexibility
 			float attenuation_k1 = 0.5;
-			float attenuation_k2 = 0.5;
-			float attenuation_k3 = 0.5;
+			float attenuation_k2 = 0.2;
+			float attenuation_k3 = 0.8;
 			attenuation = 1.0 / (attenuation_k1 + attenuation_k2*distanceToLight + 
 									   attenuation_k3 * pow(distanceToLight, 2));
 		}
 
-		outputColor +=  vec4(attenuation*(specular + ambient + diffuse), 1.0);
+		// calculate shadow value
+		float shadow = shadowCalculation(fIn.FragPosLightSpace);
+
+		outputColor +=  vec4(attenuation * (ambient + ((1.0 - shadow) * (specular + diffuse))), 1.0);
 	}
 }

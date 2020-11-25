@@ -46,5 +46,11 @@
     <None Include="poslight.vert">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="shadows.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shadows.frag">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

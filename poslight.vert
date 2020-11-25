@@ -18,6 +18,7 @@ out VERTEX_OUT
 	vec3 pos;
 	vec3 normal;
 	vec4 vertexColour;
+	vec4 FragPosLightSpace;
 } vOut;
 
 
@@ -26,6 +27,7 @@ out VERTEX_OUT
 uniform mat4 model, view, projection;
 uniform uint colourMode;
 uniform vec4 colourOverride;
+uniform mat4 lightSpaceMatrix;
 
 void main()
 {
@@ -37,8 +39,9 @@ void main()
 	{
 		vOut.vertexColour = colour;
 	}
-	vOut.pos = position;
+	vOut.pos = vec3(model * vec4(position, 1.f));
 	vOut.normal = normal; 
+	vOut.FragPosLightSpace = lightSpaceMatrix * vec4(vOut.pos,1.f);
 
 	gl_Position = (projection * view * model) * vec4(position, 1.0);
 }
