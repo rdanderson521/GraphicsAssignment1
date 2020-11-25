@@ -24,6 +24,7 @@ uniform uint emitMode;
 uniform vec3 emitColour;
 uniform vec4 lightPos[10];
 uniform vec3 lightColour[10];
+uniform uint lightMode[10];
 uniform uint numLights;
 uniform float reflectiveness; // value of 0.01 - 1
 
@@ -65,13 +66,19 @@ void main()
 		}
 	
 	}
-	outputColor =  vec4((global_ambient + emissive) , 1.f);
+	outputColor =  vec4((global_ambient * fIn.vertexColour.xyz) + emissive , 1.f);
 	for (int i = 0; i < numLights; i++)
 	{
 		vec4 position_h = vec4(fIn.pos, 1.0);
-		vec3 light_pos3 = lightPos[i].xyz;			
+		vec3 light_pos3 = lightPos[i].xyz;		
+		
+		vec3 currentLightColour = lightColour[i];
+		if (lightColour[i] == vec3(0.f))
+		{
+			currentLightColour = vec3(1.0f);
+		}
 
-		vec3 ambient = fIn.vertexColour.xyz  * 0.1;
+		vec3 ambient = fIn.vertexColour.xyz  * 0.1 * (0.8 + (0.2*currentLightColour));
 
 		// Define our vectors to calculate diffuse and specular lighting
 		mat4 mv_matrix = view * model;		// Calculate the model-view transformation
@@ -82,7 +89,7 @@ void main()
 		L = normalize(L);					// Normalise our light vector
 
 		// Calculate the diffuse component
-		vec3 diffuse = max(dot(N, L), 0.0) * fIn.vertexColour.xyz * (0.2 + (0.8*lightColour[i]));
+		vec3 diffuse = max(dot(N, L), 0.0) * fIn.vertexColour.xyz * (0.2 + (0.8*currentLightColour));
 
 		// Calculate the specular component using Phong specular reflection
 		vec3 V = normalize(viewPos - P.xyz);	
@@ -90,7 +97,7 @@ void main()
 		vec3 specular = vec3(0.f);
 		if (reflectiveness > 0.f)
 		{
-			specular = pow(max(dot(R, V), 0.0), 1/max(reflectiveness,0.0001) ) * specular_albedo * (0.8 + (0.2*lightColour[i]));
+			specular = pow(max(dot(R, V), 0.0), 1/max(reflectiveness,0.0001) ) * specular_albedo * (0.8 + (0.2*currentLightColour));
 		}
 
 		// Calculate the attenuation factor;
@@ -110,7 +117,11 @@ void main()
 		}
 
 		// calculate shadow value
-		float shadow = shadowCalculation(fIn.FragPosLightSpace);
+		float shadow = 0.f;
+		if (lightMode[i] == 1)
+		{
+			shadow = shadowCalculation(fIn.FragPosLightSpace);
+		}
 
 		outputColor +=  vec4(attenuation * (ambient + ((1.0 - shadow) * (specular + diffuse))), 1.0);
 	}

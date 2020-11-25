@@ -62,6 +62,7 @@ GLfloat angle_y, angle_inc_y, angle_z, angle_inc_z;
 GLuint drawmode;			// Defines drawing mode of sphere as points, lines or filled polygons
 GLfloat speed;				// movement increment
 GLfloat motorAngle;				// movement increment
+bool lightsOn;
 
 
 // globals for animation
@@ -78,6 +79,7 @@ GLuint lightSpaceMatrixID, shadowMapID;
 const int maxNumLights = 10;
 GLuint lightPosID[maxNumLights];
 GLuint lightColourID[maxNumLights];
+GLuint lightModeID[maxNumLights];
 int numLights;
 
 int controlMode;
@@ -121,9 +123,7 @@ void init(GLWrapper* glw)
 	controlMode = 2;
 
 	//control mode 2 defaults
-	moveX = 0;
-	moveY = 0;
-	moveZ = 0;
+	modelAngleChange = 2.f;
 	angle_inc_x = 0;
 	angle_inc_y = 0;
 	angle_inc_z = 0;
@@ -131,12 +131,13 @@ void init(GLWrapper* glw)
 	angle_y = 0;
 	angle_z = 0;
 	modelAngle_x = 0;
-	modelAngle_x = 0;
-	modelAngle_x = 0;
-	modelAngleChange = 2;
+	modelAngle_y = 0;
+	modelAngle_z = 0;
+	model_scale = 1.f;
 	x = 0;
 	y = 0;
 	z = 4;
+	lightsOn = true;
 
 	/* Load and build the vertex and fragment shaders */
 	try
@@ -220,6 +221,9 @@ void init(GLWrapper* glw)
 
 		str = "lightColour[" + std::to_string(i) + "]";
 		lightColourID[i] = glGetUniformLocation(program, str.c_str());
+
+		str = "lightMode[" + std::to_string(i) + "]";
+		lightModeID[i] = glGetUniformLocation(program, str.c_str());
 	}
 	numLightsID = glGetUniformLocation(program, "numLights");
 	viewPosID = glGetUniformLocation(program, "viewPos");
@@ -237,10 +241,32 @@ void init(GLWrapper* glw)
 	motorStator.makeTube(40, 0.85);
 	motorShaft.makeTube(40, 0.7);
 	cube.makeCube();
+
+	// print instructions
+	cout << endl <<
+		"####\\/ Drone Simulator \\/####" << endl << endl <<
+		"##### Modes #####" << endl <<
+		"[1]: View Mode" << endl <<
+		"[2]: Fly Mode (default)" << endl << endl <<
+		"##### View Mode #####" << endl <<
+		endl <<
+		"##### Fly Mode #####" << endl <<
+		"[Q]: Fly down/ land" << endl <<
+		"[E]: Fly up/ takeoff" << endl <<
+		"[W]: Fly forward" << endl <<
+		"[S]: Fly backward" << endl <<
+		"[A]: Fly left" << endl <<
+		"[D]: Fly right" << endl <<
+		"The green lights on the drone are forward and red are back." << endl <<
+		"The drone has to be a bit off the ground before you can start moving around" << endl << endl <<
+		"##### General Buttons #####" << endl <<
+		"[F] Turn lights on the drone on/off (on by default)" << endl;
+
 }
 
 void render(mat4& view, GLuint renderModelID)
 {
+
 	mat3 normalmatrix;
 
 	vec3 framePlateScale = vec3(1.f, 0.015f, 0.3f);
@@ -264,35 +290,10 @@ void render(mat4& view, GLuint renderModelID)
 	GLfloat motorStatorReflect = 2.f;
 	GLfloat standoffReflect = 1.f;
 
-	// Declare lightpos and reset num lights to 0 
-	vec4 lightpos = vec4(0.f);
-	numLights = 0;
-
 	// Define our model transformation in a stack and 
 	// push the identity matrix onto the stack
 	stack<mat4> model;
 	model.push(mat4(1.0f));
-
-	// ground plane
-	model.push(model.top());
-	{
-
-		model.top() = translate(model.top(), vec3(0.f, -1.f, 0.f));
-		model.top() = scale(model.top(), groundPlaneScale);
-
-		// set the reflectiveness uniform
-		glUniform1f(reflectivenessID, frameReflect);
-		// set the colour uniform
-		glUniform4fv(colourOverrideID, 1, &groundPlaneColour[0]);
-		// Send the model uniform and normal matrix to the currently bound shader,
-		glUniformMatrix4fv(renderModelID, 1, GL_FALSE, &(model.top()[0][0]));
-		// Recalculate the normal matrix and send to the vertex shader
-		normalmatrix = transpose(inverse(mat3(view * model.top())));
-		glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
-
-		cube.drawCube(drawmode);
-	}
-	model.pop();
 
 	// This block of code draws the drone
 	model.push(model.top());
@@ -311,40 +312,43 @@ void render(mat4& view, GLuint renderModelID)
 		model.top() = rotate(model.top(), -radians(90.f), glm::vec3(0, 1, 0)); //rotates 90 degrees to align the drone along the axis which make controls easier
 
 		model.top() = scale(model.top(), vec3(model_scale, model_scale, model_scale));//scale equally in all axis
-
+		
 		// light sources on drone
-		for (int i = 0; i < 4; i++)
+		if (lightsOn)
 		{
-			/* Draw a small sphere in the lightsource position to visually represent the light source */
-			model.push(model.top());
+			for (int i = 0; i < 4; i++)
 			{
-				model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
-				model.top() = translate(model.top(), vec3(0.7f, -0.08f, 0.f));
-				model.top() = scale(model.top(), vec3(0.02f, 0.02f, 0.02f)); // make a small sphere
-											
-				// calculate and set uniforms for the lights colour and position
-				vec3 lightPos = view * model.top() * vec4(1.0f);
-				vec3 lightColour;
-				if (i > 0 && i < 3)
-					lightColour = vec3(0.6f, 0.1f, 0.1f);
-				else
-					lightColour = vec3(0.1f, 0.6f, 0.1f);
-				glUniform4fv(lightPosID[numLights], 1, &lightPos[0]);
-				glUniform3fv(lightColourID[numLights], 1, &lightColour[0]);
-				glUniform1ui(numLightsID, ++numLights);
-				// Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
-				glUniformMatrix4fv(renderModelID, 1, GL_FALSE, &(model.top()[0][0]));
-				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				/* Draw a small sphere in the lightsource position to visually represent the light source */
+				model.push(model.top());
+				{
+					model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
+					model.top() = translate(model.top(), vec3(0.7f, -0.08f, 0.f));
+					model.top() = scale(model.top(), vec3(0.02f, 0.02f, 0.02f)); // make a small sphere
 
-				/* Draw our lightposition sphere  with emit mode on*/
-				emitmode = 1;
-				glUniform1ui(emitModeID, emitmode);
-				sphere.drawSphere(drawmode);
-				emitmode = 0;
-				glUniform1ui(emitModeID, emitmode);
+					// calculate and set uniforms for the lights colour and position
+					vec3 lightPos = view * model.top() * vec4(1.0f);
+					vec3 lightColour;
+					if (i > 0 && i < 3)
+						lightColour = vec3(0.6f, 0.1f, 0.1f);
+					else
+						lightColour = vec3(0.1f, 0.6f, 0.1f);
+					glUniform4fv(lightPosID[numLights], 1, &lightPos[0]);
+					glUniform3fv(lightColourID[numLights], 1, &lightColour[0]);
+					glUniform1ui(numLightsID, ++numLights);
+					// Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
+					glUniformMatrix4fv(renderModelID, 1, GL_FALSE, &(model.top()[0][0]));
+					normalmatrix = transpose(inverse(mat3(view * model.top())));
+					glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+					/* Draw our lightposition sphere  with emit mode on*/
+					emitmode = 1;
+					glUniform1ui(emitModeID, emitmode);
+					sphere.drawSphere(drawmode);
+					emitmode = 0;
+					glUniform1ui(emitModeID, emitmode);
+				}
+				model.pop();
 			}
-			model.pop();
 		}
 
 
@@ -782,9 +786,40 @@ void render(mat4& view, GLuint renderModelID)
 		}
 	}
 	model.pop();
+
+	// ground plane
+	model.push(model.top());
+	{
+
+		model.top() = translate(model.top(), vec3(0.f, -1.f, 0.f));
+		model.top() = scale(model.top(), groundPlaneScale);
+
+		// set the reflectiveness uniform
+		glUniform1f(reflectivenessID, frameReflect);
+		// set the colour uniform
+		glUniform4fv(colourOverrideID, 1, &groundPlaneColour[0]);
+		// Send the model uniform and normal matrix to the currently bound shader,
+		glUniformMatrix4fv(renderModelID, 1, GL_FALSE, &(model.top()[0][0]));
+		// Recalculate the normal matrix and send to the vertex shader
+		normalmatrix = transpose(inverse(mat3(view * model.top())));
+		glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+		cube.drawCube(drawmode);
+	}
+	model.pop();
 }
 
-
+void resetLights()
+{
+	numLights = 0;
+	for (int i = 0; i < maxNumLights; i++)
+	{
+		vec4 temp(0.f);
+		glUniform4fv(lightPosID[numLights], 1, &temp[0]);
+		glUniform3fv(lightColourID[numLights], 1, &temp[0]);
+	}
+	glUniform1ui(numLightsID, 0);
+}
 
 /* Called to update the display. Note that this function is called in the event loop in the wrapper
    class because we registered display as a callback function */
@@ -801,20 +836,32 @@ void display()
 	
 
 	// render shadow maps
-	projection = ortho(-10.f, 10.f, -10.f, 10.f, 0.1f, 20.f);
-
-	view = glm::lookAt(glm::vec3(0.f, 4.f, 0.f),
-		glm::vec3(x, y, z),
-		glm::vec3(0.0f, 1.0f, 0.0f));
-
-	mat4 lightSpace = projection * view;
-
-	
-
 	glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 	glClear(GL_DEPTH_BUFFER_BIT);
 	glUseProgram(shadowProgram);
+
+	resetLights();
+
+	projection = ortho(-10.f, 10.f, -10.f, 10.f, 0.1f, 20.f);
+
+	vec3 lightPos = vec3(0.f, 4.f, 0.f);
+
+	view = glm::lookAt(lightPos,
+		vec3(x, y, z),
+		vec3(0.0f, 1.0f, 0.0f));
+
+	mat4 lightSpace = projection * view;
+
+
+	
+	
+	//// Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
+	/*glUniformMatrix4fv(shadowsModelID, 1, GL_FALSE, &(model.top()[0][0]));
+	normalmatrix = transpose(inverse(mat3(view * model.top())));
+	glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);*/
+
+	
 
 	glUniformMatrix4fv(shadowsLightSpaceMatrixID, 1, GL_FALSE, &lightSpace[0][0]);
 
@@ -863,6 +910,13 @@ void display()
 		);
 	}
 
+	resetLights();
+	vec3 lightColour = vec3(10.f);
+	glUniform4fv(lightPosID[numLights], 1, &lightPos[0]);
+	glUniform1ui(lightModeID[numLights], 1);
+	glUniform3fv(lightColourID[numLights], 1, &lightColour[0]);
+	glUniform1ui(numLightsID, ++numLights);
+
 	// Send our projection and view uniforms to the currently bound shader
 	// I do that here because they are the same for all objects
 	glUniform1ui(colourModeID, colourmode);
@@ -883,73 +937,79 @@ void display()
 	glUseProgram(0);
 
 	/* Modify our animation variables */
-	angle_x += angle_inc_x;
-	angle_y += angle_inc_y;
-	angle_z += angle_inc_z;
 	
-	angle_x = 0;
-	angle_y = 0;
-	angle_z = 0;
 
 	GLfloat minmaxXZ = 9.5f;
 	GLfloat maxY = 5.f;
 	GLfloat minY = -0.8f;
 	GLfloat minYFly = -0.6f;
 	
+	if (controlMode == 1)
+	{
+		angle_x += angle_inc_x;
+		angle_y += angle_inc_y;
+		angle_z += angle_inc_z;
 
-	if (moveY > 0 && y < maxY)
-	{
-		y += moveY;
+		angle_x = 0;
+		angle_y = 0;
+		angle_z = 0;
 	}
-	else if (moveY < 0 && y > minY)
+	else if (controlMode == 2)
 	{
-		y += moveY;
-	}
+		if (moveY > 0 && y < maxY)
+		{
+			y += moveY;
+		}
+		else if (moveY < 0 && y > minY)
+		{
+			y += moveY;
+		}
 
-	if (moveZ > 0 && z < minmaxXZ && y > minYFly)
-	{
-		z += moveZ;
-		modelAngle_x = glm::max(-30.f, modelAngle_x - modelAngleChange);
-	}
-	else if (moveZ < 0 && z > -minmaxXZ && y > minYFly)
-	{
-		z += moveZ;
-		modelAngle_x = glm::min(30.f, modelAngle_x + modelAngleChange);
-	}
-	else
-	{
-		if (modelAngle_x > 0)
-			modelAngle_x -= modelAngleChange;
-		if (modelAngle_x < 0)
-			modelAngle_x += modelAngleChange;
-	}
+		if (moveZ > 0 && z < minmaxXZ && y > minYFly)
+		{
+			z += moveZ;
+			modelAngle_x = glm::max(-30.f, modelAngle_x - modelAngleChange);
+		}
+		else if (moveZ < 0 && z > -minmaxXZ && y > minYFly)
+		{
+			z += moveZ;
+			modelAngle_x = glm::min(30.f, modelAngle_x + modelAngleChange);
+		}
+		else
+		{
+			if (modelAngle_x > 0)
+				modelAngle_x -= modelAngleChange;
+			if (modelAngle_x < 0)
+				modelAngle_x += modelAngleChange;
+		}
 
-	
-	if (moveX > 0 && x < minmaxXZ && y > minYFly)
-	{
-		x += moveX;
-		modelAngle_z = glm::min(30.f, modelAngle_z + modelAngleChange);
-	}
-	else if(moveX < 0 && x > -minmaxXZ && y > minYFly)
-	{
-		x += moveX;
-		modelAngle_z = glm::max(-30.f, modelAngle_z - modelAngleChange);
-	}
-	else
-	{
-		if (modelAngle_z > 0)
-			modelAngle_z -= modelAngleChange;
-		if (modelAngle_z < 0)
-			modelAngle_z += modelAngleChange;
-	 }
 
-	if (y > minY)
-	{
-		motorAngle += 47;
-	}
-	if (motorAngle > 360)
-	{
-		motorAngle -= 360;
+		if (moveX > 0 && x < minmaxXZ && y > minYFly)
+		{
+			x += moveX;
+			modelAngle_z = glm::min(30.f, modelAngle_z + modelAngleChange);
+		}
+		else if (moveX < 0 && x > -minmaxXZ && y > minYFly)
+		{
+			x += moveX;
+			modelAngle_z = glm::max(-30.f, modelAngle_z - modelAngleChange);
+		}
+		else
+		{
+			if (modelAngle_z > 0)
+				modelAngle_z -= modelAngleChange;
+			if (modelAngle_z < 0)
+				modelAngle_z += modelAngleChange;
+		}
+
+		if (y > minY)
+		{
+			motorAngle += 47;
+		}
+		if (motorAngle > 360)
+		{
+			motorAngle -= 360;
+		}
 	}
 }
 
@@ -990,6 +1050,7 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 
 	if (modeChanged)
 	{
+		cout << "mode Changed" << endl;
 		if (controlMode == 1)
 		{
 
@@ -1004,9 +1065,17 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 			angle_y = 0;
 			angle_z = 0;
 
+			modelAngle_x = 0;
+			modelAngle_y = 0;
+			modelAngle_z = 0;
+
+			model_scale = 1.f;
+
 			x = 0;
 			y = 0;
 			z = 4;
+
+			lightsOn = true;
 		}
 	}
 
@@ -1085,20 +1154,14 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 		if (key == 'P') vz += 1.f;
 	}
 
-	if (key == 'M' && action != GLFW_PRESS)
+	/* Cycle between drawing vertices, mesh and filled polygons */
+	if (key == 'F' && action == GLFW_RELEASE )
 	{
-		colourmode = !colourmode;
-		cout << "colourmode=" << colourmode << endl;
-	}
-
-	/* Turn attenuation on and off */
-	if (key == '.' && action != GLFW_PRESS)
-	{
-		attenuationmode = !attenuationmode;
+		lightsOn = !lightsOn;
 	}
 
 	/* Cycle between drawing vertices, mesh and filled polygons */
-	if (key == ',' && action != GLFW_PRESS)
+	if (key == ',' && action != GLFW_RELEASE)
 	{
 		drawmode++;
 		if (drawmode > 2) drawmode = 0;
@@ -1122,7 +1185,6 @@ int main(int argc, char* argv[])
 
 	glw->setRenderer(display);
 	glw->setKeyCallback(keyCallback);
-	//glw->setKeyCallback(keyCallback);
 	glw->setReshapeCallback(reshape);
 
 	/* Output the OpenGL vendor and version */
