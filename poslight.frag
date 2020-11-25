@@ -34,6 +34,7 @@ vec3 global_ambient = vec3(0.05, 0.05, 0.05);
 
 float shadowCalculation(vec4 lightSpace)
 {
+
 	vec3 projCoords = lightSpace.xyz / lightSpace.w;
 
 	projCoords = projCoords * 0.5 + 0.5;
@@ -41,8 +42,10 @@ float shadowCalculation(vec4 lightSpace)
 	float closestDepth = texture(shadowMap, projCoords.xy).r;
 
 	float currentDepth = projCoords.z; 
-
-	float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
+	float bias = 0.005;
+	float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
+	if(projCoords.z > 1.0)
+        shadow = 0.0;
     return shadow;
 }
 

@@ -164,8 +164,10 @@ void init(GLWrapper* glw)
 		SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float borderColor[] = { 10.f, 10.f, 10.f, 10.f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
 	// attaches the texture to the frame buffer
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
@@ -306,6 +308,7 @@ void render(mat4& view, GLuint renderModelID)
 		model.top() = rotate(model.top(), -radians(modelAngle_y), glm::vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
 		model.top() = rotate(model.top(), -radians(modelAngle_z), glm::vec3(0, 0, 1)); //rotating in clockwise direction around z-axis
 
+		model.top() = rotate(model.top(), -radians(90.f), glm::vec3(0, 1, 0)); //rotates 90 degrees to align the drone along the axis which make controls easier
 
 		model.top() = scale(model.top(), vec3(model_scale, model_scale, model_scale));//scale equally in all axis
 
@@ -323,9 +326,9 @@ void render(mat4& view, GLuint renderModelID)
 				vec3 lightPos = view * model.top() * vec4(1.0f);
 				vec3 lightColour;
 				if (i > 0 && i < 3)
-					lightColour = vec3(0.8f, 0.2, 0.2);
+					lightColour = vec3(0.6f, 0.1f, 0.1f);
 				else
-					lightColour = vec3(0.2, 0.8f, 0.2);
+					lightColour = vec3(0.1f, 0.6f, 0.1f);
 				glUniform4fv(lightPosID[numLights], 1, &lightPos[0]);
 				glUniform3fv(lightColourID[numLights], 1, &lightColour[0]);
 				glUniform1ui(numLightsID, ++numLights);
@@ -428,14 +431,13 @@ void render(mat4& view, GLuint renderModelID)
 
 						if (i % 2 == 0)
 						{
-							model.top() = rotate(model.top(), -radians(motorAngle++), glm::vec3(0, 1, 0));
+							model.top() = rotate(model.top(), -radians(motorAngle), glm::vec3(0, 1, 0));
 						}
 						else
 						{
-							model.top() = rotate(model.top(), radians(motorAngle++), glm::vec3(0, 1, 0));
+							model.top() = rotate(model.top(), radians(motorAngle), glm::vec3(0, 1, 0));
 						}
 
-						// mtor struts
 						model.push(model.top());
 						{
 							model.top() = translate(model.top(), vec3(0.f, 0.042f, 0.f));
@@ -444,6 +446,32 @@ void render(mat4& view, GLuint renderModelID)
 								model.push(model.top());
 								{
 									model.top() = rotate(model.top(), -radians(120.f * j), glm::vec3(0, 1, 0));
+									model.push(model.top());
+									{
+										if (i % 2 == 0)
+										{
+											model.top() = rotate(model.top(), -radians(10.f), glm::vec3(1, 0, 0));
+										}
+										else
+										{
+											model.top() = rotate(model.top(), radians(10.f), glm::vec3(1, 0, 0));
+										}
+										model.top() = translate(model.top(), vec3(0.15f, 0.03f, 0.f));
+										model.top() = scale(model.top(), vec3(0.3f,0.01f,0.05f));
+
+										// set the reflectiveness uniform
+										glUniform1f(reflectivenessID, motorReflect);
+										// set the colour uniform
+										glUniform4fv(colourOverrideID, 1, &motorColour[0]);
+										// Send the model uniform and normal matrix to the currently bound shader,
+										glUniformMatrix4fv(renderModelID, 1, GL_FALSE, &(model.top()[0][0]));
+										// Recalculate the normal matrix and send to the vertex shader
+										normalmatrix = transpose(inverse(mat3(view * model.top())));
+										glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+
+										cube.drawCube(drawmode);
+									}
+									model.pop();
 									model.push(model.top());
 									{
 										model.top() = translate(model.top(), vec3(0.015f, 0.f, 0.f));
@@ -462,7 +490,6 @@ void render(mat4& view, GLuint renderModelID)
 										cube.drawCube(drawmode);
 									}
 									model.pop();
-
 									model.push(model.top());
 									{
 										model.top() = translate(model.top(), vec3(-0.015f, 0.f, 0.f));
@@ -565,7 +592,6 @@ void render(mat4& view, GLuint renderModelID)
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
 						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-						/* Draw our cube*/
 						cube.drawCube(drawmode);
 					}
 					model.pop();
@@ -587,7 +613,6 @@ void render(mat4& view, GLuint renderModelID)
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
 						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-						/* Draw our cube*/
 						motorStator.drawTube(drawmode);
 					}
 					model.pop();
@@ -776,10 +801,10 @@ void display()
 	
 
 	// render shadow maps
-	projection = ortho(-10.f, 10.f, -10.f, 10.f, 0.1f, 7.5f);
+	projection = ortho(-10.f, 10.f, -10.f, 10.f, 0.1f, 20.f);
 
-	view = glm::lookAt(glm::vec3(1.f, 1.0f, -1.f),
-		glm::vec3(0.0f, 0.0f, 0.0f),
+	view = glm::lookAt(glm::vec3(0.f, 4.f, 0.f),
+		glm::vec3(x, y, z),
 		glm::vec3(0.0f, 1.0f, 0.0f));
 
 	mat4 lightSpace = projection * view;
@@ -792,7 +817,9 @@ void display()
 	glUseProgram(shadowProgram);
 
 	glUniformMatrix4fv(shadowsLightSpaceMatrixID, 1, GL_FALSE, &lightSpace[0][0]);
+
 	render(view,shadowsModelID);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glUseProgram(0);
 	
@@ -830,8 +857,8 @@ void display()
 			temp = 0;
 
 		view = lookAt(
-			vec3(0, 1, 0), // Camera is at (0,0,4), in World Space
-			vec3(x, 0, z), // and looks at the origin
+			vec3(0, 2, 0), // Camera is at (0,0,4), in World Space
+			vec3(x, y, z), // and looks at the origin
 			vec3(0, 1, 0)  // Head is up (set to 0,-1,0 to look upside-down)
 		);
 	}
@@ -859,47 +886,71 @@ void display()
 	angle_x += angle_inc_x;
 	angle_y += angle_inc_y;
 	angle_z += angle_inc_z;
-
-	x += moveX;
-	y += moveY;
-	z += moveZ;
+	
 	angle_x = 0;
 	angle_y = 0;
 	angle_z = 0;
 
+	GLfloat minmaxXZ = 9.5f;
+	GLfloat maxY = 5.f;
+	GLfloat minY = -0.8f;
+	GLfloat minYFly = -0.6f;
+	
 
-	if (moveZ == 0)
+	if (moveY > 0 && y < maxY)
+	{
+		y += moveY;
+	}
+	else if (moveY < 0 && y > minY)
+	{
+		y += moveY;
+	}
+
+	if (moveZ > 0 && z < minmaxXZ && y > minYFly)
+	{
+		z += moveZ;
+		modelAngle_x = glm::max(-30.f, modelAngle_x - modelAngleChange);
+	}
+	else if (moveZ < 0 && z > -minmaxXZ && y > minYFly)
+	{
+		z += moveZ;
+		modelAngle_x = glm::min(30.f, modelAngle_x + modelAngleChange);
+	}
+	else
 	{
 		if (modelAngle_x > 0)
 			modelAngle_x -= modelAngleChange;
 		if (modelAngle_x < 0)
 			modelAngle_x += modelAngleChange;
 	}
-	else if (moveZ > 0)
+
+	
+	if (moveX > 0 && x < minmaxXZ && y > minYFly)
 	{
-		modelAngle_x = glm::max(-30.f, modelAngle_x - modelAngleChange);
+		x += moveX;
+		modelAngle_z = glm::min(30.f, modelAngle_z + modelAngleChange);
+	}
+	else if(moveX < 0 && x > -minmaxXZ && y > minYFly)
+	{
+		x += moveX;
+		modelAngle_z = glm::max(-30.f, modelAngle_z - modelAngleChange);
 	}
 	else
-	{
-		modelAngle_x = glm::min(30.f, modelAngle_x + modelAngleChange);
-	}
-
-	if (moveX == 0)
 	{
 		if (modelAngle_z > 0)
 			modelAngle_z -= modelAngleChange;
 		if (modelAngle_z < 0)
 			modelAngle_z += modelAngleChange;
-	}
-	else if (moveX > 0)
-	{
-		modelAngle_z = glm::min(30.f, modelAngle_z + modelAngleChange);
-	}
-	else
-	{
-		modelAngle_z = glm::max(-30.f, modelAngle_z - modelAngleChange);
-	}
+	 }
 
+	if (y > minY)
+	{
+		motorAngle += 47;
+	}
+	if (motorAngle > 360)
+	{
+		motorAngle -= 360;
+	}
 }
 
 /* Called whenever the window is resized. The new window size is given, in pixels. */
@@ -999,10 +1050,21 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 				moveZ = 0;
 		}
 
-		if (key == 'F') y -= speed; //down
-		if (key == 'R') y += speed;	//up
-		//if (key == 'S') z -= speed; //forward
-		//if (key == 'W') z += speed;	//backward
+		if (key == 'E')//up
+		{
+			if (action == GLFW_PRESS)
+				moveY = speed;
+			if (action == GLFW_RELEASE)
+				moveY = 0;
+
+		}
+		else if (key == 'Q')//down
+		{
+			if (action == GLFW_PRESS)
+				moveY = -speed;
+			if (action == GLFW_RELEASE)
+				moveY = 0;
+		}
 	}
 	else
 	{
