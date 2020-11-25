@@ -1,11 +1,3 @@
-/*
- poslight.cpp
- Demonstrates a positional light with attenuation
- with per-vertex lighting (Gouraud shading) coded in the vertex shader.
- Displays a cube and a sphere and a small sphere to show the light position
- Includes controls to move the light source and rotate the view
- Iain Martin October 2018
-*/
 
 /* Link to static libraries, could define these as linker inputs in the project settings instead
 if you prefer */
@@ -31,8 +23,7 @@ if you prefer */
 
 // Include headers for our objects
 #include "sphere.h"
-#include "cube.h"
-
+#include "cubev2.h"
 #include "tube.h"
 
 /* Define buffer object indices */
@@ -61,7 +52,8 @@ GLfloat angle_x, angle_inc_x, x, model_scale, z, y, vx, vy, vz;
 GLfloat angle_y, angle_inc_y, angle_z, angle_inc_z;
 GLuint drawmode;			// Defines drawing mode of sphere as points, lines or filled polygons
 GLfloat speed;				// movement increment
-GLfloat motorAngle;				// movement increment
+GLfloat motorAngle;				
+GLfloat motorAngleInc;				
 bool lightsOn;
 
 
@@ -92,7 +84,7 @@ GLuint numspherevertices;
 /* Global instances of our objects */
 Tube tube;
 Tube motorBell, motorStator, motorShaft;
-Cube cube;
+Cubev2 cube;
 Sphere sphere;
 
 using namespace std;
@@ -236,7 +228,7 @@ void init(GLWrapper* glw)
 	/* create our sphere and cube objects */
 
 	sphere.makeSphere(20, 20);
-	tube.makeTube(40, 0.1);
+	tube.makeTube(15, 0.1);
 	motorBell.makeTube(40, 0.1);
 	motorStator.makeTube(40, 0.85);
 	motorShaft.makeTube(40, 0.7);
@@ -244,11 +236,21 @@ void init(GLWrapper* glw)
 
 	// print instructions
 	cout << endl <<
-		"####\\/ Drone Simulator \\/####" << endl << endl <<
+		"####\\/ Drone Simulator \\/####" << endl << 
+		endl <<
 		"##### Modes #####" << endl <<
 		"[1]: View Mode" << endl <<
-		"[2]: Fly Mode (default)" << endl << endl <<
+		"[2]: Fly Mode (default)" << endl << 
+		endl <<
 		"##### View Mode #####" << endl <<
+		"[Q]: Zoom out" << endl <<
+		"[E]: Zoom in" << endl <<
+		"[W]: Pan up" << endl <<
+		"[S]: Pan down" << endl <<
+		"[A]: Increase pan speed left" << endl <<
+		"[D]: Increase pan speed right" << endl << 
+		"[R]: Increase propeller speed" << endl <<
+		"[T]: Decrease propeller speed right" << endl <<
 		endl <<
 		"##### Fly Mode #####" << endl <<
 		"[Q]: Fly down/ land" << endl <<
@@ -258,9 +260,11 @@ void init(GLWrapper* glw)
 		"[A]: Fly left" << endl <<
 		"[D]: Fly right" << endl <<
 		"The green lights on the drone are forward and red are back." << endl <<
-		"The drone has to be a bit off the ground before you can start moving around" << endl << endl <<
+		"The drone has to be a bit off the ground before you can start moving around" << endl << 
+		endl <<
 		"##### General Buttons #####" << endl <<
-		"[F] Turn lights on the drone on/off (on by default)" << endl;
+		"[F] Turn lights on the drone on/off (on by default)" << endl <<
+		"[,] Switch between draw modes to see the triangles or vertices" << endl;
 
 }
 
@@ -299,9 +303,9 @@ void render(mat4& view, GLuint renderModelID)
 	model.push(model.top());
 	{
 		// Define the global model transformations (rotate and scale). Note, we're not modifying thel ight source position
-		model.top() = rotate(model.top(), -radians(angle_x), glm::vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
-		model.top() = rotate(model.top(), -radians(angle_y), glm::vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
-		model.top() = rotate(model.top(), -radians(angle_z), glm::vec3(0, 0, 1)); //rotating in clockwise direction around z-axis
+		//model.top() = rotate(model.top(), -radians(angle_x), glm::vec3(1, 0, 0)); //rotating in clockwise direction around x-axis
+		//model.top() = rotate(model.top(), -radians(angle_y), glm::vec3(0, 1, 0)); //rotating in clockwise direction around y-axis
+		//model.top() = rotate(model.top(), -radians(angle_z), glm::vec3(0, 0, 1)); //rotating in clockwise direction around z-axis
 		model.top() = translate(model.top(), vec3(x, y, z)); // translating xyz
 
 		// rotates the model after transforming it so these transformations do not affect the translation
@@ -845,7 +849,16 @@ void display()
 
 	projection = ortho(-10.f, 10.f, -10.f, 10.f, 0.1f, 20.f);
 
-	vec3 lightPos = vec3(0.f, 4.f, 0.f);
+
+	vec3 lightPos;
+	if (controlMode == 1)
+	{
+		lightPos = vec3(-4.f, 4.f, -4.f);
+	}
+	else if (controlMode == 2)
+	{
+		lightPos = vec3(0.f, 4.f, 0.f);
+	}
 
 	view = glm::lookAt(lightPos,
 		vec3(x, y, z),
@@ -853,15 +866,6 @@ void display()
 
 	mat4 lightSpace = projection * view;
 
-
-	
-	
-	//// Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
-	/*glUniformMatrix4fv(shadowsModelID, 1, GL_FALSE, &(model.top()[0][0]));
-	normalmatrix = transpose(inverse(mat3(view * model.top())));
-	glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);*/
-
-	
 
 	glUniformMatrix4fv(shadowsLightSpaceMatrixID, 1, GL_FALSE, &lightSpace[0][0]);
 
@@ -896,6 +900,10 @@ void display()
 			vec3(0, 0, 0), // and looks at the origin
 			vec3(0, 1, 0)  // Head is up (set to 0,-1,0 to look upside-down)
 		);
+
+		view = rotate(view, -angle_x, vec3(1, 0, 0));
+		view = rotate(view, radians(angle_y), vec3(0, 1, 0));
+		
 	}
 	else if (controlMode == 2)
 	{
@@ -946,13 +954,8 @@ void display()
 	
 	if (controlMode == 1)
 	{
-		angle_x += angle_inc_x;
 		angle_y += angle_inc_y;
-		angle_z += angle_inc_z;
-
-		angle_x = 0;
-		angle_y = 0;
-		angle_z = 0;
+		motorAngle += motorAngleInc;
 	}
 	else if (controlMode == 2)
 	{
@@ -1053,7 +1056,27 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 		cout << "mode Changed" << endl;
 		if (controlMode == 1)
 		{
+			angle_inc_x = 0;
+			angle_inc_y = 0.05;
+			angle_inc_z = 0;
 
+			angle_x = 0;
+			angle_y = 0;
+			angle_z = 0;
+
+			modelAngle_x = 0;
+			modelAngle_y = 0;
+			modelAngle_z = 0;
+
+			model_scale = 1.5f;
+
+			x = 0;
+			y = -0.5;
+			z = 0;
+
+			motorAngleInc = 5;
+
+			lightsOn = true;
 		}
 		else if (controlMode == 2)
 		{
@@ -1083,7 +1106,46 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 
 	if (controlMode == 1)
 	{
+		if (key == 'A')//left
+		{
+			angle_inc_y += speed;
+		}
+		else if (key == 'D')//right
+		{
+			angle_inc_y -= speed;
+		}
 
+		if (key == 'W')//Up
+		{
+			if (angle_x < 1.57) // about 90deg
+				angle_x += speed;
+
+		}
+		else if (key == 'S')//Down
+		{
+			if (angle_x > 0)
+				angle_x -= speed;
+		}
+
+		if (key == 'E')// zoom in
+		{
+			model_scale += speed;
+
+		}
+		else if (key == 'Q')// zoom out
+		{
+			model_scale -= speed;
+		}
+
+		if (key == 'R')// prop speed up
+		{
+			motorAngleInc += 1;
+
+		}
+		else if (key == 'T')// prop speed down
+		{
+			motorAngleInc -= 1;
+		}
 	}
 	else if (controlMode == 2)
 	{
@@ -1103,7 +1165,7 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 				moveX = 0;
 		}
 
-		if (key == 'W')//left
+		if (key == 'W')//forward
 		{
 			if (action == GLFW_PRESS)
 				moveZ = speed;
@@ -1111,7 +1173,7 @@ static void keyCallback(GLFWwindow* window, int key, int s, int action, int mods
 				moveZ = 0;
 
 		}
-		else if (key == 'S')//right
+		else if (key == 'S')//back
 		{
 			if (action == GLFW_PRESS)
 				moveZ = -speed;

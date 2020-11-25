@@ -24,13 +24,10 @@
     <ClCompile Include="..\..\common\wrapper_glfw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\common\cube.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\common\sphere.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\common\cylinder.cpp">
+    <ClCompile Include="cubev2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

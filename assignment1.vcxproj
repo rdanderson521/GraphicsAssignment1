@@ -143,10 +143,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\common\cube.cpp" />
-    <ClCompile Include="..\..\common\cylinder.cpp" />
     <ClCompile Include="..\..\common\sphere.cpp" />
     <ClCompile Include="..\..\common\wrapper_glfw.cpp" />
+    <ClCompile Include="cubev2.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Tube.cpp" />
   </ItemGroup>
