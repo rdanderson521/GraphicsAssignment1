@@ -58,8 +58,14 @@ GLfloat motorAngle;				// movement increment
 GLfloat light_x, light_y, light_z;
 
 /* Uniforms*/
-GLuint modelID, viewID, projectionID, lightposID, normalmatrixID;
-GLuint colourmodeID, emitmodeID, attenuationmodeID;
+GLuint modelID, viewID, projectionID, normalMatrixID, viewPosID;
+GLuint colourModeID, emitModeID, attenuationModeID;
+GLuint colourOverrideID, reflectivenessID, numLightsID;
+
+const int maxNumLights = 10;
+GLuint lightPosID[maxNumLights];
+int numLights;
+
 
 GLfloat aspect_ratio;		/* Aspect ratio of the window defined in the reshape callback*/
 GLuint numspherevertices;
@@ -90,9 +96,11 @@ void init(GLWrapper* glw)
 	angle_inc_x = angle_inc_y = angle_inc_z = 0;
 	model_scale = 1.f;
 	aspect_ratio = 1.3333f;
-	colourmode = 0; emitmode = 0;
+	colourmode = 0; 
+	emitmode = 0;
 	attenuationmode = 1; // Attenuation is on by default
 	motorAngle = 0;
+	numLights = 0;
 
 	// Generate index (name) for one vertex array object
 	glGenVertexArrays(1, &vao);
@@ -114,16 +122,23 @@ void init(GLWrapper* glw)
 
 	/* Define uniforms to send to vertex shader */
 	modelID = glGetUniformLocation(program, "model");
-	colourmodeID = glGetUniformLocation(program, "colourmode");
-	emitmodeID = glGetUniformLocation(program, "emitmode");
-	attenuationmodeID = glGetUniformLocation(program, "attenuationmode");
+	colourModeID = glGetUniformLocation(program, "colourMode");
+	emitModeID = glGetUniformLocation(program, "emitMode");
+	attenuationModeID = glGetUniformLocation(program, "attenuationMode");
 	viewID = glGetUniformLocation(program, "view");
 	projectionID = glGetUniformLocation(program, "projection");
-	lightposID = glGetUniformLocation(program, "lightpos");
-	normalmatrixID = glGetUniformLocation(program, "normalmatrix");
+	normalMatrixID = glGetUniformLocation(program, "normalMatrix");
+	for (int i = 0; i < maxNumLights; i++)
+	{
+		std::string str = "lightPos[" + std::to_string(i) + "]";
+		lightPosID[i] = glGetUniformLocation(program, str.c_str());
+	}
+	numLightsID = glGetUniformLocation(program, "numLights");
+	viewPosID = glGetUniformLocation(program, "viewPos");
+	colourOverrideID = glGetUniformLocation(program, "colourOverride");
+	reflectivenessID = glGetUniformLocation(program, "reflectiveness");
 
 	/* create our sphere and cube objects */
-
 
 	sphere.makeSphere(20, 20);
 	tube.makeTube(40, 0.1);
@@ -157,8 +172,8 @@ void display()
 	// Define the normal matrix
 	mat3 normalmatrix;
 
-	// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-	mat4 projection = perspective(radians(30.0f), aspect_ratio, 0.1f, 100.0f);
+	// Projection matrix : 60° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
+	mat4 projection = perspective(radians(60.f), aspect_ratio, 0.1f, 100.f);
 
 	// Camera matrix
 	mat4 view = lookAt(
@@ -175,13 +190,16 @@ void display()
 	// Define the light position and transform by the view matrix
 	vec4 lightpos = view * vec4(light_x, light_y, light_z, 1.0);
 
+	numLights = 0;
+
 	// Send our projection and view uniforms to the currently bound shader
 	// I do that here because they are the same for all objects
-	glUniform1ui(colourmodeID, colourmode);
-	glUniform1ui(attenuationmodeID, attenuationmode);
+	glUniform1ui(colourModeID, colourmode);
+	glUniform1ui(attenuationModeID, attenuationmode);
 	glUniformMatrix4fv(viewID, 1, GL_FALSE, &view[0][0]);
 	glUniformMatrix4fv(projectionID, 1, GL_FALSE, &projection[0][0]);
-	glUniform4fv(lightposID, 1, value_ptr(lightpos));
+	glUniform4fv(lightPosID[0], 1, value_ptr(lightpos));
+	glUniform1ui(numLightsID, ++numLights);
 
 	/* Draw a small sphere in the lightsource position to visually represent the light source */
 	model.push(model.top());
@@ -191,14 +209,14 @@ void display()
 																	 // Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
 		glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
 		normalmatrix = transpose(inverse(mat3(view * model.top())));
-		glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+		glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 		/* Draw our lightposition sphere  with emit mode on*/
 		emitmode = 1;
-		glUniform1ui(emitmodeID, emitmode);
+		glUniform1ui(emitModeID, emitmode);
 		sphere.drawSphere(drawmode);
 		emitmode = 0;
-		glUniform1ui(emitmodeID, emitmode);
+		glUniform1ui(emitModeID, emitmode);
 	}
 	model.pop();
 
@@ -223,8 +241,15 @@ void display()
 		vec3 motorShaftScale = vec3(0.025f, 0.085f, 0.025f);
 		vec3 motorStrutsScale = vec3(0.011f, 0.011f, 0.14f);
 
+		vec4 frameColour = vec4(0.20f, 0.20f, 0.20f, 1.f);
+		vec4 motorColour = vec4(0.60f, 0.60f, 0.60f, 1.f);
+		vec4 motorStatorColour = vec4(0.88f, 0.44f, 0.f, 1.f);
+		vec4 standoffColour = vec4(1.f, 0.f, 0.f, 1.f);
 
-		
+		GLfloat frameReflect = 0.f;
+		GLfloat motorReflect = 10.f;
+		GLfloat motorStatorReflect = 2.f;
+		GLfloat standoffReflect = 4.f;
 
 		model.push(model.top());
 		{
@@ -232,11 +257,15 @@ void display()
 			model.top() = translate(model.top(), vec3(0.f, -0.085f, 0.f));
 			model.top() = scale(model.top(), framePlateScale);
 
+			// set the reflectiveness uniform
+			glUniform1f(reflectivenessID, frameReflect);
+			// set the colour uniform
+			glUniform4fv(colourOverrideID, 1, &frameColour[0]);
 			// Send the model uniform and normal matrix to the currently bound shader,
 			glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
 			// Recalculate the normal matrix and send to the vertex shader
 			normalmatrix = transpose(inverse(mat3(view * model.top())));
-			glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+			glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 			/* Draw our cube*/
 			cube.drawCube(drawmode);
@@ -248,12 +277,15 @@ void display()
 			model.top() = translate(model.top(), vec3(0.f, 0.085f, 0.f));
 			model.top() = scale(model.top(), framePlateScale);
 
+			// set the reflectiveness uniform
+			glUniform1f(reflectivenessID, frameReflect);
+			// set the colour uniform
+			glUniform4fv(colourOverrideID, 1, &frameColour[0]);
 			// Send the model uniform and normal matrix to the currently bound shader,
 			glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 			// Recalculate the normal matrix and send to the vertex shader
 			normalmatrix = transpose(inverse(mat3(view * model.top())));
-			glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+			glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 			/* Draw our cube*/
 			cube.drawCube(drawmode);
@@ -268,20 +300,18 @@ void display()
 			{
 				model.top() = rotate(model.top(), -radians((90 * i) + 45.f), glm::vec3(0, 1, 0));
 				model.top() = translate(model.top(), vec3(0.45f, -0.1f, 0.f));
-
-				
-
 				model.top() = scale(model.top(), frameArmScale);
 
-
+				// set the reflectiveness uniform
+				glUniform1f(reflectivenessID, frameReflect);
+				// set the colour uniform
+				glUniform4fv(colourOverrideID, 1, &frameColour[0]);	
 				// Send the model uniform and normal matrix to the currently bound shader,
 				glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-				/* Draw our cube*/
 				cube.drawCube(drawmode);
 			}
 			model.pop();
@@ -327,12 +357,15 @@ void display()
 										model.top() = translate(model.top(), vec3(0.015f, 0.f, 0.f));
 										model.top() = scale(model.top(), motorStrutsScale);
 
+										// set the reflectiveness uniform
+										glUniform1f(reflectivenessID, motorReflect);
+										// set the colour uniform
+										glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 										// Send the model uniform and normal matrix to the currently bound shader,
 										glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 										// Recalculate the normal matrix and send to the vertex shader
 										normalmatrix = transpose(inverse(mat3(view * model.top())));
-										glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+										glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 										cube.drawCube(drawmode);
 									}
@@ -343,12 +376,15 @@ void display()
 										model.top() = translate(model.top(), vec3(-0.015f, 0.f, 0.f));
 										model.top() = scale(model.top(), motorStrutsScale);
 
+										// set the reflectiveness uniform
+										glUniform1f(reflectivenessID, motorReflect);
+										// set the colour uniform
+										glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 										// Send the model uniform and normal matrix to the currently bound shader,
 										glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 										// Recalculate the normal matrix and send to the vertex shader
 										normalmatrix = transpose(inverse(mat3(view * model.top())));
-										glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+										glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 										cube.drawCube(drawmode);
 									}
@@ -366,12 +402,15 @@ void display()
 							model.top() = scale(model.top(), motorShaftScale);
 							model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
 
+							// set the reflectiveness uniform
+							glUniform1f(reflectivenessID, motorReflect);
+							// set the colour uniform
+							glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 							// Send the model uniform and normal matrix to the currently bound shader,
 							glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 							// Recalculate the normal matrix and send to the vertex shader
 							normalmatrix = transpose(inverse(mat3(view * model.top())));
-							glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+							glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 							motorShaft.drawTube(drawmode);
 						}
@@ -383,12 +422,15 @@ void display()
 							model.top() = scale(model.top(), motorBellScale);
 							model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
 
+							// set the reflectiveness uniform
+							glUniform1f(reflectivenessID, motorReflect);
+							// set the colour uniform
+							glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 							// Send the model uniform and normal matrix to the currently bound shader,
 							glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 							// Recalculate the normal matrix and send to the vertex shader
 							normalmatrix = transpose(inverse(mat3(view * model.top())));
-							glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+							glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 							motorBell.drawTube(drawmode);
 						}
@@ -402,14 +444,16 @@ void display()
 						model.top() = translate(model.top(), vec3(0.f, -0.06f, 0.f));
 						model.top() = scale(model.top(), vec3(0.12f, 0.01f, 0.04f));
 
+						// set the reflectiveness uniform
+						glUniform1f(reflectivenessID, motorReflect);
+						// set the colour uniform
+						glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 						// Send the model uniform and normal matrix to the currently bound shader,
 						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 						// Recalculate the normal matrix and send to the vertex shader
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
-						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
-						/* Draw our cube*/
 						cube.drawCube(drawmode);						
 					}
 					model.pop();
@@ -419,12 +463,15 @@ void display()
 						model.top() = translate(model.top(), vec3(0.f, -0.06f, 0.f));
 						model.top() = scale(model.top(), vec3(0.04f, 0.01f, 0.12f));
 
+						// set the reflectiveness uniform
+						glUniform1f(reflectivenessID, motorReflect);
+						// set the colour uniform
+						glUniform4fv(colourOverrideID, 1, &motorColour[0]);
 						// Send the model uniform and normal matrix to the currently bound shader,
 						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 						// Recalculate the normal matrix and send to the vertex shader
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
-						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 						/* Draw our cube*/
 						cube.drawCube(drawmode);
@@ -438,12 +485,15 @@ void display()
 						model.top() = scale(model.top(), motorStatorScale);
 						model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
 
+						// set the reflectiveness uniform
+						glUniform1f(reflectivenessID, motorStatorReflect);
+						// set the colour uniform
+						glUniform4fv(colourOverrideID, 1, &motorStatorColour[0]);
 						// Send the model uniform and normal matrix to the currently bound shader,
 						glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 						// Recalculate the normal matrix and send to the vertex shader
 						normalmatrix = transpose(inverse(mat3(view * model.top())));
-						glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+						glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 						/* Draw our cube*/
 						motorStator.drawTube(drawmode);
@@ -471,12 +521,15 @@ void display()
 				model.top() = scale(model.top(), standoffScale);
 				model.top() = rotate(model.top(), -radians(90.f), glm::vec3(1, 0, 0));
 
+				// set the reflectiveness uniform
+				glUniform1f(reflectivenessID, standoffReflect);
+				// set the colour uniform
+				glUniform4fv(colourOverrideID, 1, &standoffColour[0]);
 				// Send the model uniform and normal matrix to the currently bound shader,
 				glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -494,7 +547,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -512,7 +565,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -530,7 +583,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -548,7 +601,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -566,7 +619,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -584,7 +637,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -602,7 +655,7 @@ void display()
 
 				// Recalculate the normal matrix and send to the vertex shader
 				normalmatrix = transpose(inverse(mat3(view * model.top())));
-				glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
+				glUniformMatrix3fv(normalMatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
 
 				/* Draw our cube*/
 				tube.drawTube(drawmode);
@@ -613,20 +666,6 @@ void display()
 	}
 	model.pop();
 
-	// This block of code draws the sphere
-	//model.push(model.top());
-	//{
-	//	model.top() = translate(model.top(), vec3(-x - 0.5f, 0, 0));
-	//	model.top() = scale(model.top(), vec3(model_scale / 3.f, model_scale / 3.f, model_scale / 3.f));//scale equally in all axis
-
-	//	// Recalculate the normal matrix and send the model and normal matrices to the vertex shader																							// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																								// Recalculate the normal matrix and send to the vertex shader																						// Recalculate the normal matrix and send to the vertex shader
-	//	glUniformMatrix4fv(modelID, 1, GL_FALSE, &(model.top()[0][0]));
-	//	normalmatrix = transpose(inverse(mat3(view * model.top())));
-	//	glUniformMatrix3fv(normalmatrixID, 1, GL_FALSE, &normalmatrix[0][0]);
-
-	//	sphere.drawSphere(drawmode); // Draw our sphere
-	//}
-	//model.pop();
 
 	glDisableVertexAttribArray(0);
 	glUseProgram(0);
